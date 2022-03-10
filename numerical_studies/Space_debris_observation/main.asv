@@ -1,0 +1,73 @@
+clear all;
+
+%% Initialization
+global environment 
+environment = 'J2';
+
+consts = startup_formation_control();
+
+spacecraft.dr_observation = 100e3; 
+
+orbit_epoch = datetime(2021, 9, 7, 0, 0, 0);
+misson_duration = seconds(days(1));
+
+% Target orbit
+target_orbit = [consts.rEarth + 700e3; 0; NaN; NaN; 0; 0];
+target_orbit(3) = get_SSO_inclination(target_orbit(1), target_orbit(2), consts);
+target_orbit(4) = get_RAAN_for_terminator_orbit(orbit_epoch);
+rv_target_orbit = oe2rv(target_orbit, consts);
+
+% Studied orbit
+studied_orbit = target_orbit;
+studied_orbit(1) = target_orbit(1) + 100e3;
+studied_orbit(3) = get_SSO_inclination(studied_orbit(1), studied_orbit(2), consts);
+
+target_orbit_rv = oe2rv(target_orbit, consts);
+studied_orbit_rv = oe2rv(studied_orbit, consts);
+
+% plot_orbits([target_orbit_rv; studied_orbit_rv], consts);
+
+%% Griding studied orbit
+N_nodes = 1e4;
+
+u_vec = 0 : 2*pi/N_nodes : (2*pi - 2*pi/N_nodes);
+
+for i = 1:N_nodes
+    oe = studied_orbit;
+    oe(6) = u_vec(i);
+    rv_studied_orbit_grid(6*i-5:6*i,1) = oe2rv(oe, consts);
+end
+
+%% Propagating orbit
+
+rv_initial = [rv_target_orbit; rv_studied_orbit_grid];
+
+options_precision = odeset('RelTol',1e-12,'AbsTol',1e-12);
+spacecraft = [];
+[t, rv_ECI] = ode45(@(t, rv) rhs_Formation_inertial(t, rv, consts, spacecraft), 0:100, rv_initial, options_precision);
+rv_ECI = rv_ECI'; 
+
+% Orbit visualization
+R_sun_unit_initial = sun(juliandate(orbit_epoch))' / vecnorm(sun(juliandate(orbit_epoch)));
+sun_direction = [zeros(3,1), R_sun_unit_initial];
+ox = [[0;0;0],...
+      [1;0;0]]*7e6;
+oy = [[0;0;0],...
+      [0;1;0]]*7e6;
+oz = [[0;0;0],...
+      [0;0;1]]*7e6;
+
+figure('Name','Target_orbit', 'NumberTitle', 'Off');
+earth_sphere('m');
+hold on;
+a = plot3(rv_ECI(1,:), rv_ECI(2,:), rv_ECI(3,:), 'k');
+hold on;
+b = plot3(sun_direction(1,:).*10e6, sun_direction(2,:).*10e6, sun_direction(3,:).*10e6, 'y', 'LineWidth', 2);
+hold on;
+c1 = plot3(ox(1,:), ox(2,:), ox(3,:),'r');
+c2 = plot3(oy(1,:), oy(2,:), oy(3,:),'g');
+c3 = plot3(oz(1,:), oz(2,:), oz(3,:),'b');
+axis equal;
+legend([a,b,c1, c2, c3], 'Target orbit', 'Sun direction', 'x-axis', 'y-axis', 'z-axis');
+grid on;
+

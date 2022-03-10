@@ -1,0 +1,88 @@
+clear all;
+
+%% Initializing
+global environment
+environment = 'J2';
+consts = startup_formation_control();
+
+% orbital elements
+oe(1) = consts.rEarth + 867.2e3; % sma, m
+oe(2) = 0; % ecc, -
+oe(3) = deg2rad(98.88); % inc, deg
+oe(4) = deg2rad(270.8); % RAAN, deg
+oe(5) = 0; % AOP, deg
+oe(6) = deg2rad(200); % M, deg
+spacecraft = [];
+orbit_epoch_GD = datetime(2021, 9, 24, 15,0,0) - hours(3);
+orbit_epoch_JD = juliandate(orbit_epoch_GD);
+
+theta_Earth0 = gstime(orbit_epoch_JD); % Greenwich mean sidereal time at the orbit epoch
+
+% Population map
+cities_table = readtable('worldcities');
+min_population = 1e5;
+
+% Map resolution parameters
+earth = imread('earth_1024_512.jpg');
+scale1 = size(earth,1);
+scale2 = size(earth,2);
+
+bw = 0.5;                    % beam width for solar reflector(deg)
+footprint_diameter_min = (oe(1) - consts.rEarth)*deg2rad(bw);
+th_beam = deg2rad(bw/2);
+
+% simulation parameters
+T_simulation = round(2*pi*sqrt(oe(1)^3/consts.muEarth));                % seconds
+dt = 1;
+
+%% Building earth population model using large cities database
+
+logic_large_cities = table2array(cities_table(:,10)) >= min_population;
+cities_matrix = table2array(cities_table(:,3:4));
+cities_matrix = [cities_matrix, table2array(cities_table(:,10))];
+large_cities_table = cities_table(logic_large_cities,:);
+large_cities_matrix = cities_matrix(logic_large_cities,:);
+large_cities_matrix(:,1) = deg2rad(large_cities_matrix(:,1));
+large_cities_matrix(:,2) = deg2rad(large_cities_matrix(:,2));
+
+Population_matrix = zeros(scale1,scale2);
+[M, N] = size(Population_matrix);
+phi_range = linspace(0, 2*pi, N+1);
+phi_range = phi_range(1:end-1);
+th_range = linspace(0, pi, M+1);
+th_range = th_range(1:end-1);
+[PHI, TH] = meshgrid(phi_range, th_range);
+
+for i = 1:size(large_cities_matrix,1)
+    [~,ind1] = min(abs(large_cities_matrix(i,1) - th_range));
+    [~,ind2] = min(abs(large_cities_matrix(i,2) - phi_range));
+    Population_matrix(ind1, ind2) = large_cities_matrix(i,3);
+end
+logical = Population_matrix == 0;
+Population_matrix_NaN = Population_matrix;
+Population_matrix_NaN(logical) = NaN;
+
+% Plotting Earth population map
+figure;
+surface(rad2deg(phi_range), rad2deg(th_range), Population_matrix_NaN, 'Marker', '*', 'MarkerEdgeColor', 'k', 'MarkerFaceColor', 'k', 'MarkerSize', 2);
+xlim([-180 180]);
+ylim([-90 90]);
+xlabel('longitude, \lambda, deg');
+ylabel('latitude, \phi, deg');
+grid on;
+
+%% Orbit propagation and SV convertion to ECEF coordinate system
+rv_init = oe2rv(oe, consts);
+dt = [0:dt:T_simulation];
+options_precision = odeset('RelTol',1e-12,'AbsTol',1e-12);
+[t_vec, rv_ECI] = ode45(@(t, rv) rhs_Formation_inertial(t, rv, consts, spacecraft), dt, rv_init, options_precision);
+rv_ECI = rv_ECI';
+t_vec_JD = orbit_epoch_JD + t_vec/consts.day2sec;
+[r_ECEF] = ECItoECEF(t_vec_JD(1),r_ECI(:,1));
+
+% Coverage
+tic;
+[coords(1), coords(2), covs, r_sat] = orbit_coverage_analytic(oe, bw, T_simulation, dt, theta_Earth0, Population_matrix, consts);
+toc;
+pos = squeeze(r_sat);
+plot_analytic_coverage;

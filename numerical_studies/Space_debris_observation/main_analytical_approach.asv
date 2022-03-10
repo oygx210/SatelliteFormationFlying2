@@ -1,0 +1,36 @@
+clear all;
+
+%% Initialization
+global environment 
+environment = 'J2';
+syms t
+
+consts = startup_formation_control();
+
+spacecraft.dr_observation_max = 500e3; 
+
+orbit_epoch = datetime(2022, 1, 1, 0, 0, 0);
+misson_duration = seconds(days(1));
+
+% Target orbit
+r_apogee = consts.rEarth + 800e3;
+r_perigee = consts.rEarth + 600e3;
+target_orbit(1) = (r_apogee + r_perigee) / 2;
+target_orbit(2) = (r_apogee - r_perigee) / target_orbit(1);
+target_orbit(3) = get_SSO_inclination(target_orbit(1), target_orbit(2), consts);
+target_orbit(4) = get_RAAN_for_terminator_orbit(orbit_epoch);
+target_orbit(5:6) = 0;
+
+rv_target_orbit = oe2rv(target_orbit, consts);
+rv_target_fun = analytical_rv_function(target_orbit, consts);
+
+a_d_range = consts.rEarth + [600e3 800e3];
+i_d_range = [96*pi/180 98*pi/180];
+RAAN_d_range = [target_orbit(4) - 0.005 target_orbit(4) + 0.005];
+M_d_range = [0 2*pi];
+variables_range = [a_d_range; i_d_range; RAAN_d_range; M_d_range];
+variables0 = [consts.rEarth + 700e3; 97*pi/180; target_orbit(4); 0];
+
+% tau = time_to_observation(variables, variables_range, rv_obs_fun, dr_observation_max, consts);
+fun = @(variables)time_to_observation(variables, variables_range, rv_target_fun, spacecraft.dr_observation_max, consts);
+tau_max = fminsearch(fun,variables0);

@@ -1,0 +1,8 @@
+pic1 = load('olympic_rings.txt');
+pic1(:,2) = -pic1(:,2);
+dl = [0, 6];
+pic1 = dl + pic1;
+
+
+save('C:\GoogleDrive\SatelliteFormationFlying\olympic_rings', 'pic1');
+

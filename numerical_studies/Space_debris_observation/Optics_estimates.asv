@@ -1,0 +1,7 @@
+r_obs = 900e3;
+d_debris = 1;
+alpha = (d_debris/2 / r_obs;
+lambda = 500e-9;
+D_aperture = 1.22 * lambda / alpha;
+D_aperture = 1;
+res = 2.44 * r_obs * lambda / D_aperture;

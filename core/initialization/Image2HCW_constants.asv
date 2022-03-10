@@ -1,0 +1,119 @@
+function HCW_constants = Image2HCW_constants(graphics, relative_orbit_type, ISD_min, alpha_image)
+
+% Step 1. Choosing graphics to demonstrate
+    switch graphics
+        case "AA"            
+            % building the letters
+            formation_geometry = [
+                2.12 2.06
+                1.96 1.67
+                1.87 1.19
+                1.75 0.77
+                1.52 0.35
+                1.35 0.77
+                1.16 1.19
+                0.99 1.67
+                1.32 1.67
+                1.65 1.67
+                0.84 2.07
+                0.64 2.55
+                2.27 2.55
+
+                2.12 2.06
+                1.96 1.67
+                1.87 1.19
+                1.75 0.77
+                1.52 0.35
+                1.35 0.77
+                1.16 1.19
+                0.99 1.67
+                1.32 1.67
+                1.65 1.67
+                0.84 2.07
+                0.64 2.55
+                2.27 2.55
+                ];
+            formation_geometry(14:end,1) = formation_geometry(14:end,1)  + 2.27;
+            
+        case "IAA_logo" 
+            
+            formation_geometry = [
+            9.78 1.36
+            9.7 1.88
+            10.34 2.04
+            10.49 1.45
+            9.46 1.04
+            9.12 0.87
+            8.91 1.18];
+            
+            geometrical_center = geometric_median(formation_geometry');
+            geometrical_center = geometrical_center';
+
+            formation_geometry = [geometrical_center; formation_geometry];
+            formation_geometry = formation_geometry - geometrical_center;
+
+            phi = 0:2*pi/19:(2*pi - 2*pi/19);
+            [x,y] = pol2cart(phi, 1.5*ones(1,length(phi)));
+            formation_geometry(9:27,1) = x;
+            formation_geometry(9:27,2) = y;
+
+
+    end
+
+% Step 2. Building the image wrt to the pixels geometrical median
+
+    geometrical_center = geometric_median(formation_geometry');
+    geometrical_center = geometrical_center';
+
+    formation_geometry = [geometrical_center; formation_geometry];
+    formation_geometry = formation_geometry - geometrical_center;
+
+% Step 3. Scaling image to satisfy requirements on 
+    ISD_raw = 99999;
+    for i = 1:size(formation_geometry,1)-1
+        for j = 1:size(formation_geometry,1)-1
+            if i ~= j
+                ISD_raw_new = sqrt((formation_geometry(i+1,1) - formation_geometry(j+1,1))^2 + (formation_geometry(i+1,2) - formation_geometry(j+1,2))^2);
+                if ISD_raw_new < ISD_raw
+                    ISD_raw = ISD_raw_new;
+                end
+            end
+        end
+    end
+
+    scale = ISD_min/ISD_raw;
+    formation_geometry = formation_geometry*scale;
+
+    [alpha0, rho] = cart2pol(formation_geometry(:,1), formation_geometry(:,2));
+    alpha = alpha0 + alpha_image;
+    
+    switch relative_orbit_type
+        case "GCO"
+            c1 = rho;
+            c2 = sqrt(3)/2*rho;
+        case "PCO"
+            c1 = rho;
+            c2 = rho;
+    end
+    
+    c3 = zeros(length(c1),1);
+    
+    HCW_constants = [c1, c2, c3, alpha]';
+    formation_configuration(:,1) = zeros(4,1);
+
+   
+      % оказывается, важно учесть  аргумент широты, который будет в момент
+   % показа - добавить это в формулу, потому что alpha0 выбираются для
+   % картинки ориентированной стандартно - соответственно, зная аргумент
+   % широты во время показа можно определить alpha^\ast как u + alpha^\ast
+   % = 0 Задает ли это сразу необходимую траекторию? казалось бы, да потому
+   % что в любом случае конкретное положение будет зависеть от аргумента
+   % широты
+   
+   % тогда alp^\ast можно сразу сюда же включить потому что в любом случае
+   % это уже детерминированные траектории, которые не зависят от времени
+   % перестроения на траекторию
+
+   
+   
+end

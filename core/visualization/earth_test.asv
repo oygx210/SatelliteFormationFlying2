@@ -1,0 +1,18 @@
+clear all;
+
+[X,Y,Z]=sphere(50);
+R=6378e3;
+globe= surf(-X*R,Y*R,-Z*R);
+lat = deg2rad(48.856613);
+lon = deg2rad(2.352222);
+[x,y,z]=sph2cart(lon,lat,R);
+cdata = imread('earthmap1k.jpg');
+set(globe, 'FaceColor', 'texturemap', 'CData', cdata,  'EdgeColor', 'none');
+set(gcf,'Color','w')
+set(gca, 'visible', 'off')
+axis equal
+ax.Clipping = 'off';
+view (90,0);
+alpha = 0:2*pi/10:2*pi;
+rotate(globe, [0 0 1], alpha) % test to see if it's working
+pause(0.1);

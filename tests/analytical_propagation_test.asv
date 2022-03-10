@@ -1,0 +1,56 @@
+clear all;
+
+%% Initialization
+global environment 
+syms t
+spacecraft = [];
+consts = startup_formation_control();
+
+orbit_epoch = datetime(2021, 9, 7, 0, 0, 0);
+mission_duration = seconds(days(1));
+
+% target_orbit = [consts.rEarth + 700e3; 0; NaN; NaN; 0; 0];
+rv_target_orbit = [-3670e3; -3870e3; 4400e3; 4.7e3; -7.4e3; 1e3];
+target_orbit = rv2oe(rv_target_orbit, consts);
+
+% target_orbit(3) = get_SSO_inclination(target_orbit(1), target_orbit(2), consts);
+% target_orbit(4) = get_RAAN_for_terminator_orbit(orbit_epoch);
+% rv_target_orbit = oe2rv(target_orbit, consts);
+
+r_target_an = get_analytical_position_function(target_orbit, consts);
+r_test = double(subs(r_target_an, t, seconds(days(4))));
+
+
+
+options_precision = odeset('RelTol',1e-12,'AbsTol',1e-12);
+environment = 'J2';
+rv_target_orbit = [-3670e3; -3870e3; 4400e3; 4.7e3; -7.4e3; 1e3];
+[t_vec, rv_ECI_numerical_J2] = ode45(@(t, rv) rhs_Formation_inertial(t, rv, consts, spacecraft), [1:4*consts.day2sec], rv_target_orbit, options_precision);
+rv_ECI_numerical_J2 = rv_ECI_numerical_J2'; 
+
+r = [9672e3; 4320e3; -8691e3];
+d
+% environment = 'point mass';
+% [t_vec, rv_ECI_numerical_PM] = ode45(@(t, rv) rhs_Formation_inertial(t, rv, consts, spacecraft), [1:10000], rv_target_orbit, options_precision);
+% rv_ECI_numerical_PM = rv_ECI_numerical_PM'; 
+% 
+% 
+% r_ECI_analytical = double(subs(r_target_an, t, [1:60000]));
+% 
+% % dr = vecnorm(rv_ECI_numerical(1:3,:) - r_ECI_analytical);
+% dr_an_J2 = vecnorm(r_ECI_analytical - rv_ECI_numerical_J2(1:3,:));
+% dr_an_PM = vecnorm(r_ECI_analytical - rv_ECI_numerical_PM(1:3,:));
+% dr_J2_PM = vecnorm(rv_ECI_numerical_J2(1:3,:) - rv_ECI_numerical_PM(1:3,:));
+% 
+% % figure('Name', 'Comparison between numerical and analytical orbit propagation', 'NumberTitle', 'off');
+% % plot3(r_ECI_analytical(1,:), r_ECI_analytical(1,:), r_ECI_analytical(3,:), 'k');
+% % hold on;
+% % plot3(rv_ECI_numerical(1,:), rv_ECI_numerical(1,:), rv_ECI_numerical(3,:), 'r');
+% 
+% figure;
+% plot(dr_an_J2);
+% hold on;
+% plot(dr_an_PM);
+% hold on;
+% plot(dr_J2_PM);
+% legend('analytical vs num J2', 'analytical vs num PM', 'PM vs num J2');

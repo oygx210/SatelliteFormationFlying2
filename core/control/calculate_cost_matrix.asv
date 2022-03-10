@@ -1,0 +1,118 @@
+function cost_matrix = calculate_cost_matrix(demonstration, formation, HCW_constants_current, spacecraft, consts)
+    
+    global T;
+    
+    mean_motion = sqrt(consts.muEarth/formation.coe(1)^3);
+    orbit_period = 2*pi/mean_motion;
+    
+    delta_u = mod(mean_motion*seconds(demonstration.deployment_time - formation.orbit_epoch), 2*pi);
+    u = mod(formation.coe(6) + delta_u, 2*pi);
+    formation.coe(6) = u;
+    formation.rv = oe2rv(formation.coe, consts);
+
+    rv_orb_current = get_rv_from_analytic_HCW_solution(target_orbit, HCW_constants_current, consts);
+
+    for i = 1:formation.N_sats
+        rv_ECI_current(i*6-5:i*6,1) = orb2ECI(target_orbit, rv_orb_current(:,i), consts);
+    end
+
+    tic;
+    cost_matrix_dV = get_cost_matrix(rv_ECI_current, demonstration, formation, spacecraft, consts);
+    tic;
+
+    function cost_matrix_dV = get_cost_matrix(rv_ECI_initial, demonstration, formation, spacecraft, consts)
+        cost_matrix_dV = zeros(formation.N_sats-1);
+        f = waitbar(0,'Calculating reconf cost matrix & reconf parameters');    
+        formation.geometry = [];
+    
+        for i = 1:(size(demonstration.HCW_constants,2)-1)
+            f = waitbar(i/(size(demonstration.HCW_constants,2)-1));        
+            for j = 1:(size(demonstration.HCW_constants,2)-1)
+                rv_ECI = [];
+                t_vec = [];
+                formation.geometry = [];
+                
+                formation.geometry(:,1) = [0; 0; 0; 0];
+                formation.geometry(:,2) = demonstration.HCW_constants(:,1+j);
+                formation.N_sats = 2;
+                formation.N_active_sats = 1;
+                rv_ECI(1:6,1) = rv_ECI_initial(1:6,1);            
+                rv_ECI(7:12,1) = rv_ECI_initial(6*(i+1)-5:6*(i+1),1);
+
+                % reconfiguration
+
+                mode = 3;
+                [t_vec, rv_ECI, impulsive_maneuvers_dV, ~] = multisatellite_orbit_correction_3_impulse(rv_ECI(:,end), consts, spacecraft, formation, mode);
+                state_after_correction(i,j,:) = rv_ECI(7:12, end);
+                dt_impulsive_correction(i,j) = t_vec(end);
+                reconfiguraiton_matrix(i,j) = impulsive_maneuvers_dV;
+            end
+        end
+        close(f);
+
+        rv_ECI_initial = [];
+        rv_ECI = [];
+        t_vec = [];
+        formation.N_sats = size(demonstration.HCW_constants,2);
+        formation.N_active_sats = formation.N_sats - 1;
+        dt_reconfiguration = max(dt_impulsive_correction,[], 'all');
+        rv_ECI_initial = zeros(formation.N_sats,formation.N_active_sats, 6);
+
+        delta_u2 = mod(n*dt_reconfiguration, 2*pi);
+        target_orbit_coe(6) = mod(target_orbit_coe(6) + delta_u2, 2*pi);
+        target_orbit = oe2rv(target_orbit_coe, consts);
+        for i = 1:size(formation.N_active_sats)
+            rv_ECI_initial(1,i,:) = target_orbit;
+        end
+        for i = 1:formation.N_active_sats
+            for j = 1:formation.N_active_sats
+                rv = squeeze(state_after_correction(i,j,:));
+                sat_oe_raw = rv2oe(rv,consts);
+                sat_oe(1:5) = sat_oe_raw(1:5);
+                sat_oe(6) = mod(n*(dt_reconfiguration - dt_impulsive_correction(i,j)));                
+                rv_ECI_initial(6*(1+i)-5:6*(1+i),j,:) = oe2rv(sat_oe, consts);
+            end
+        end
+        T = demonstration.deployment_time + dt_reconfiguration;
+        % postcontinuous control
+        
+%                 mode = 1;
+%                 [t_vec_out, rv_ECI_out, continuous_maneuvers_dV, ~] = continuous_post_correction(rv_ECI(:,end), consts, spacecraft, formation, mode);
+%                 t_vec = [t_vec; t_vec_out(2:end)];
+%                 rv_ECI = [rv_ECI, rv_ECI_out(:,2:end)];    
+%                 T = t_vec(end);
+% 
+%                 maneuvers_reconfiguration = impulsive_maneuvers_dV + continuous_maneuvers_dV;
+% 
+%                 % 2. Maintenance (up to image demonstration)
+% 
+%                 T_maintenance = demonstration.demo_time(1);
+%                 dt_rude_control = seconds(minutes(10));
+% 
+%                 [t_vec_maintenance, rv_ECI_maintenance, maneuvers_maintenance1] = maintenance(rv_ECI(:,end), T_maintenance, dt_rude_control, formation, spacecraft, consts);
+%                 t_vec = [t_vec; t_vec_maintenance(2:end)];
+%                 rv_ECI = [rv_ECI, rv_ECI_maintenance(:,2:end)];
+%                 T = t_vec(end);
+% 
+%                 % Stage 3. Image demonstration
+% 
+%                 options_precision = odeset('RelTol',1e-12,'AbsTol',1e-12);
+%                 [t_out, rv_ECI_out] = ode45(@(t, rv) rhs_Formation_inertial(t, rv, consts, spacecraft), [T:demonstration.demo_time(2)], rv_ECI(:,end), options_precision);
+%                 rv_ECI_out = rv_ECI_out'; 
+%                 rv_ECI = [rv_ECI, rv_ECI_out(:,2:end)];
+%                 t_vec = [t_vec; t_out(2:end)];    
+%                 T = t_vec(end);
+% 
+%                 % 4. Maintenance
+% 
+%                 T_maintenance = seconds(demonstration.reconfiguration_time - formation.orbit_epoch);
+%                 dt_rude_control = seconds(minutes(5));
+%                 [t_vec_maintenance, rv_ECI_maintenance, maneuvers_maintenance2] = maintenance(rv_ECI(:,end),T_maintenance, dt_rude_control, formation, spacecraft, consts);
+%                 t_vec = [t_vec; t_vec_maintenance(2:end)];
+%                 rv_ECI = [rv_ECI, rv_ECI_maintenance(:,2:end)];
+%                 T = t_vec(end);
+                
+%                 cost_matrix_dV(i,j) = maneuvers_reconfiguration + maneuvers_maintenance1 + maneuvers_maintenance2;
+                        
+    end
+end
